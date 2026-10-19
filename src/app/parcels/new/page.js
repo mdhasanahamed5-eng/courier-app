@@ -29,6 +29,10 @@ const emptyForm = {
   specialInstructions: "",
 };
 
+function areaLabel(match) {
+  return match.zone_en ? `${match.city_en} / ${match.zone_en}` : match.city_en;
+}
+
 function Field({ label, htmlFor, children }) {
   return (
     <div className="mb-4">
@@ -127,7 +131,7 @@ export default function NewParcelPage() {
       return;
     }
 
-    if (address.length < 5) {
+    if (address.length < 3) {
       if (!areaTouchedRef.current) {
         setForm((prev) =>
           prev.city === "" && prev.zone === ""
@@ -139,9 +143,18 @@ export default function NewParcelPage() {
     }
 
     const timer = setTimeout(async () => {
-      const { data, error } = await supabase.rpc("detect_area", {
+      let { data, error } = await supabase.rpc("detect_area_v2", {
         p_address: address,
       });
+
+      if (!error && (!data || data.length === 0)) {
+        const fallback = await supabase.rpc("detect_district", {
+          p_address: address,
+        });
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       if (requestId !== detectCounterRef.current) return;
 
       if (error || !data || data.length === 0) {
@@ -157,19 +170,12 @@ export default function NewParcelPage() {
       }
 
       const top = data[0];
-      const second = data[1];
-      const clearWinner =
-        !second || Number(top.score) - Number(second.score) >= 0.1;
 
-      if (
-        top.match_kind === "confident" &&
-        clearWinner &&
-        !areaTouchedRef.current
-      ) {
+      if (top.match_kind === "confident" && !areaTouchedRef.current) {
         setForm((prev) => ({
           ...prev,
           city: top.city_en,
-          zone: top.zone_en,
+          zone: top.zone_en ?? "",
         }));
         setAreaHint({ address, kind: "auto", matches: data });
       } else {
@@ -200,7 +206,7 @@ export default function NewParcelPage() {
     setForm((prev) => ({
       ...prev,
       city: match.city_en,
-      zone: match.zone_en,
+      zone: match.zone_en ?? "",
     }));
     setAreaHint(null);
   }
@@ -437,8 +443,11 @@ export default function NewParcelPage() {
 
                 {hint && hint.kind === "auto" && (
                   <p className="mt-2 text-sm text-green-700">
-                    ঠিকানা থেকে নিজে থেকে বসানো হয়েছে: {hint.matches[0].city_en}{" "}
-                    / {hint.matches[0].zone_en}। ভুল মনে হলে নিজে বদলে নিন।
+                    ঠিকানা থেকে নিজে থেকে বসানো হয়েছে:{" "}
+                    {areaLabel(hint.matches[0])}।
+                    {hint.matches[0].zone_en
+                      ? " ভুল মনে হলে নিজে বদলে নিন।"
+                      : " জোন ফাঁকা আছে, ঠিকানায় এলাকার নাম লিখুন বা নিচে নিজে লিখুন।"}
                   </p>
                 )}
 
@@ -451,11 +460,11 @@ export default function NewParcelPage() {
                       {hint.matches.map((match) => (
                         <button
                           type="button"
-                          key={`${match.city_en}-${match.zone_en}`}
+                          key={`${match.city_en}-${match.zone_en ?? ""}`}
                           onClick={() => applyArea(match)}
                           className="rounded border border-yellow-400 bg-white px-3 py-1 text-yellow-900"
                         >
-                          {match.city_en} / {match.zone_en}
+                          {areaLabel(match)}
                         </button>
                       ))}
                     </div>
