@@ -164,7 +164,8 @@ function SuperAdminContent() {
           <SidebarLink href="/super-admin/riders">Riders</SidebarLink>
           <SidebarLink href="/super-admin/merchants">Merchants</SidebarLink>
           <SidebarLink href="/super-admin/branches">Branches</SidebarLink>
-      
+          <SidebarLink href="/super-admin/branch-users">Branch Users</SidebarLink>
+          <SidebarLink href="/super-admin/delivery-charges">Delivery Charges</SidebarLink>
 
           <div className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
             Reports
