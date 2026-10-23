@@ -1,451 +1,144 @@
 "use client";
+import React, { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search, Plus, Filter, Edit, Trash2, Download, Printer, Upload, MapPin } from 'lucide-react';
 
-import { Suspense, useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { supabase } from "@/lib/supabase";
-
-const DISTRICTS = [
-  "Bagerhat", "Bandarban", "Barguna", "Barishal", "Bhola", "Bogura",
-  "Brahmanbaria", "Chandpur", "Chapainawabganj", "Chattogram", "Chuadanga",
-  "Cox's Bazar", "Cumilla", "Dhaka", "Dinajpur", "Faridpur", "Feni",
-  "Gaibandha", "Gazipur", "Gopalganj", "Habiganj", "Jamalpur", "Jashore",
-  "Jhalokati", "Jhenaidah", "Joypurhat", "Khagrachhari", "Khulna", "Kishoreganj",
-  "Kurigram", "Kushtia", "Lakshmipur", "Lalmonirhat", "Madaripur", "Magura",
-  "Manikganj", "Meherpur", "Moulvibazar", "Munshiganj", "Mymensingh", "Naogaon",
-  "Narail", "Narayanganj", "Narsingdi", "Natore", "Netrokona", "Nilphamari",
-  "Noakhali", "Pabna", "Panchagarh", "Patuakhali", "Pirojpur", "Rajbari",
-  "Rajshahi", "Rangamati", "Rangpur", "Satkhira", "Shariatpur", "Sherpur",
-  "Sirajganj", "Sunamganj", "Sylhet", "Tangail", "Thakurgaon",
+const dummyBranches = [
+  { id: 'B-001', name: 'Dhaka Main Branch', location: 'Dhanmondi, Dhaka', manager: 'Rahim Uddin', phone: '01700000001', status: 'Active' },
+  { id: 'B-002', name: 'Chattogram Branch', location: 'Agrabad, Chattogram', manager: 'Karim Ullah', phone: '01700000002', status: 'Active' },
+  { id: 'B-003', name: 'Sylhet Branch', location: 'Zindabazar, Sylhet', manager: 'Samiul Islam', phone: '01700000003', status: 'Inactive' },
+  { id: 'B-004', name: 'Rajshahi Branch', location: 'Saharpara, Rajshahi', manager: 'Anisur Rahman', phone: '01700000004', status: 'Active' },
 ];
 
-const UPAZILAS = {
-  Dhaka: ["Dhamrai", "Dohar", "Keraniganj", "Nawabganj", "Savar", "Dhanmondi", "Mirpur", "Uttara", "Gulshan", "Mohammadpur", "Banani", "Motijheel", "Ramna", "Badda", "Khilgaon"],
-  Gazipur: ["Gazipur Sadar", "Kaliakair", "Kaliganj", "Kapasia", "Sreepur"],
-  Narayanganj: ["Araihazar", "Bandar", "Narayanganj Sadar", "Rupganj", "Sonargaon"],
-  Chattogram: ["Anwara", "Banshkhali", "Boalkhali", "Fatikchhari", "Hathazari", "Patiya", "Raozan", "Sitakunda"],
-  Sylhet: ["Balaganj", "Beanibazar", "Sylhet Sadar", "Golapganj"],
-  Rajshahi: ["Bagha", "Rajshahi Sadar", "Paba", "Puthia"],
-  Khulna: ["Batiaghata", "Khulna Sadar", "Dumuria", "Koyra"],
-};
-
-const BRANCH_TYPES = ["Parent", "Sub Branch", "Hub", "Pickup Point"];
-
-function SearchableSelect({ label, placeholder, options, value, onChange, disabled }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const ref = useRef(null);
-
-  useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const filtered = options.filter((o) =>
-    o.toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <div className="relative" ref={ref}>
-      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => !disabled && setOpen(!open)}
-        className="flex w-full items-center justify-between rounded border border-gray-300 bg-white px-3 py-2 text-left text-sm disabled:bg-gray-100 disabled:text-gray-400"
-      >
-        <span className={value ? "text-gray-900" : "text-gray-400"}>
-          {value || placeholder}
-        </span>
-        <span className="text-gray-400">▼</span>
-      </button>
-
-      {open && (
-        <div className="absolute z-20 mt-1 w-full rounded border border-gray-200 bg-white shadow-lg">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search..."
-            className="w-full border-b px-3 py-2 text-sm outline-none"
-            autoFocus
-          />
-          <div className="max-h-48 overflow-auto">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-gray-400">No results</div>
-            ) : (
-              filtered.map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => {
-                    onChange(opt);
-                    setOpen(false);
-                    setSearch("");
-                  }}
-                  className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100"
-                >
-                  {opt}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BranchesContent() {
+export default function BranchPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [branches, setBranches] = useState([]);
-  const [error, setError] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [areas, setAreas] = useState([]);
-  const [form, setForm] = useState({
-    name: "",
-    address: "",
-    branch_type: "",
-    district: "",
-    area: "",
-    phone: "",
-    email: "",
-    password: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const fileInputRef = useRef(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    loadBranches();
-  }, []);
+  const handlePrint = () => window.print();
+  const handleAddBranch = () => router.push('/super-admin/branches/new');
+  const handleBulkImport = () => fileInputRef.current.click();
 
-  function loadAreasForDistrict(districtName) {
-    const list = UPAZILAS[districtName] || [`${districtName} Sadar`];
-    setAreas(list);
-  }
+  const handleExportCSV = () => {
+    const headers = ["ID,Branch Name,Location,Manager,Phone,Status\n"];
+    const rows = dummyBranches.map(b => `${b.id},${b.name},${b.location},${b.manager},${b.phone},${b.status}`).join("\n");
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join("") + rows;
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", "branches_list.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-  async function loadBranches() {
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !userData.user) {
-      router.replace("/login");
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userData.user.id)
-      .maybeSingle();
-
-    if (!profile || profile.role !== "super_admin") {
-      setError("শুধু Super Admin এই পেজ দেখতে পারবেন।");
-      setLoading(false);
-      return;
-    }
-
-    const { data, error: branchError } = await supabase
-      .from("branches")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (branchError) {
-      setBranches([]);
-    } else {
-      setBranches(data || []);
-    }
-
-    setLoading(false);
-  }
-
-  async function handleAddBranch(e) {
-    e.preventDefault();
-    setSaving(true);
-    setMessage("");
-
-    const { error } = await supabase.from("branches").insert({
-      name: form.name,
-      address: form.address,
-      branch_type: form.branch_type,
-      district: form.district,
-      area: form.area,
-      phone: form.phone,
-      email: form.email,
-    });
-
-    if (error) {
-      setMessage("এরর: " + error.message);
-    } else {
-      setMessage("Branch সফলভাবে যোগ হয়েছে!");
-      setForm({
-        name: "",
-        address: "",
-        branch_type: "",
-        district: "",
-        area: "",
-        phone: "",
-        email: "",
-        password: "",
-      });
-      setAreas([]);
-      setShowForm(false);
-      await loadBranches();
-    }
-
-    setSaving(false);
-  }
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-100">
-        <p className="text-gray-600">লোড হচ্ছে...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-100">
-        <div className="rounded-lg border border-red-200 bg-white p-6 text-red-600">
-          {error}
-        </div>
-      </div>
-    );
-  }
+  const filteredBranches = dummyBranches.filter(branch => 
+    branch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    branch.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    branch.manager.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    branch.id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <aside className="w-64 flex-shrink-0 bg-gray-900 text-white">
-        <div className="border-b border-gray-700 p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-bold">SA</div>
-            <div>
-              <h1 className="font-bold">Super Admin</h1>
-              <p className="text-xs text-gray-400">Control Panel</p>
-            </div>
-          </div>
+    <div className="space-y-6">
+      <input type="file" ref={fileInputRef} onChange={(e) => alert(`Selected file: ${e.target.files[0].name}`)} className="hidden" accept=".csv, .xlsx" />
+
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Branch Management</h1>
+          <p className="text-sm text-gray-500">Home / Super Admin / <span className="text-slate-800 font-medium">Branches</span></p>
         </div>
-
-        <nav className="mt-4 space-y-1 px-3 pb-6">
-          <Link href="/super-admin" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">Home</Link>
-          <div className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Parcel</div>
-          <Link href="/admin/parcels" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">All Parcels</Link>
-          <div className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Management</div>
-          <Link href="/super-admin/riders" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">Riders</Link>
-          <Link href="/super-admin/merchants" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">Merchants</Link>
-          <Link href="/super-admin/branches" className="flex items-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium">Branches</Link>
-         
-          <div className="mt-6 border-t border-gray-700 pt-4">
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                router.replace("/login");
-              }}
-              className="w-full rounded-lg px-4 py-2.5 text-left text-sm text-red-400 hover:bg-gray-800"
-            >
-              Logout
-            </button>
-          </div>
-        </nav>
-      </aside>
-
-      <main className="flex-1 overflow-auto p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Branches</h2>
-            <p className="text-sm text-gray-500">সব ব্রাঞ্চের তালিকা</p>
-          </div>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
-          >
-            {showForm ? "বাতিল" : "+ Create New Branch"}
+        <div className="flex items-center gap-3">
+          <button onClick={handlePrint} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all shadow-sm">
+            <Printer size={16} /> Print
+          </button>
+          <button onClick={handleBulkImport} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all shadow-sm">
+            <Upload size={16} /> Bulk Import
+          </button>
+          <button onClick={handleAddBranch} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-md">
+            <Plus size={18} /> Add Branch
           </button>
         </div>
+      </div>
 
-        {message && (
-          <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">{message}</div>
-        )}
+      {/* Action Bar */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 justify-between items-center">
+        <div className="relative w-full md:w-96">
+          <span className="absolute inset-y-0 left-3 flex items-center text-gray-400"><Search size={18} /></span>
+          <input 
+            type="text" 
+            placeholder="Search by branch name, location or ID..." 
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-all">
+            <Filter size={16} /> Filter
+          </button>
+          <button onClick={handleExportCSV} className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-all">
+            <Download size={16} /> Export CSV
+          </button>
+        </div>
+      </div>
 
-        {showForm && (
-          <form onSubmit={handleAddBranch} className="mb-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="bg-teal-600 px-5 py-3 text-white">
-              <h3 className="font-semibold">Create New Branch</h3>
-            </div>
-            <div className="space-y-4 p-5">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Name</label>
-                <input
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Branch Name"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Full Address</label>
-                <input
-                  type="text"
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Branch Address"
-                />
-              </div>
-
-              <SearchableSelect
-                label="Branch Type"
-                placeholder="Select Type"
-                options={BRANCH_TYPES}
-                value={form.branch_type}
-                onChange={(v) => setForm({ ...form, branch_type: v })}
-              />
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <SearchableSelect
-                  label="Districts"
-                  placeholder="Select District"
-                  options={DISTRICTS}
-                  value={form.district}
-                  onChange={(v) => {
-                    setForm({ ...form, district: v, area: "" });
-                    loadAreasForDistrict(v);
-                  }}
-                />
-                <SearchableSelect
-                  label="Area"
-                  placeholder={form.district ? "Select Area" : "Select district first"}
-                  options={areas}
-                  value={form.area}
-                  onChange={(v) => setForm({ ...form, area: v })}
-                  disabled={!form.district}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Contact Number</label>
-                <div className="flex">
-                  <span className="inline-flex items-center rounded-l border border-r-0 border-gray-300 bg-gray-50 px-3 text-sm text-gray-500">+88</span>
-                  <input
-                    type="text"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full rounded-r border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="Branch Contact Number"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="Email"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="Password"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Image</label>
-                <input type="file" accept="image/*" className="w-full rounded border border-gray-300 px-3 py-2 text-sm" />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  {saving ? "Submitting..." : "Submit"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm({
-                      name: "",
-                      address: "",
-                      branch_type: "",
-                      district: "",
-                      area: "",
-                      phone: "",
-                      email: "",
-                      password: "",
-                    });
-                    setAreas([]);
-                  }}
-                  className="rounded bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          </form>
-        )}
-
-        {!showForm && (
-          <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">Name</th>
-                    <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">Type</th>
-                    <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">District</th>
-                    <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">Phone</th>
+      {/* Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
+              <tr className="uppercase text-[11px] tracking-wider">
+                <th className="px-6 py-4">Branch ID</th>
+                <th className="px-6 py-4">Branch Name</th>
+                <th className="px-6 py-4">Location</th>
+                <th className="px-6 py-4">Manager</th>
+                <th className="px-6 py-4">Phone</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredBranches.length > 0 ? (
+                filteredBranches.map((branch, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 font-medium text-blue-600">{branch.id}</td>
+                    <td className="px-6 py-4 font-medium text-slate-800">{branch.name}</td>
+                    <td className="px-6 py-4 text-slate-600">
+                      <div className="flex items-center gap-1">
+                        <MapPin size={14} className="text-gray-400" /> {branch.location}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-600">{branch.manager}</td>
+                    <td className="px-6 py-4 text-slate-600">{branch.phone}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium 
+                        ${branch.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {branch.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Edit size={16} /></button>
+                        <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16} /></button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {branches.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-5 py-8 text-center text-gray-500">
-                        কোনো Branch নেই।
-                      </td>
-                    </tr>
-                  ) : (
-                    branches.map((b) => (
-                      <tr key={b.id} className="hover:bg-gray-50">
-                        <td className="px-5 py-4 text-sm font-medium text-gray-900">{b.name || "—"}</td>
-                        <td className="px-5 py-4 text-sm text-gray-600">{b.branch_type || "—"}</td>
-                        <td className="px-5 py-4 text-sm text-gray-600">{b.district || "—"}</td>
-                        <td className="px-5 py-4 text-sm text-gray-500">{b.phone || "—"}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                ))
+              ) : (
+                <tr><td colSpan="7" className="px-6 py-10 text-center text-gray-500">No branches found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
+          <p className="text-xs text-gray-500">Showing 1 to {filteredBranches.length} of {filteredBranches.length} entries</p>
+          <div className="flex gap-2">
+            <button className="px-3 py-1 text-xs border border-gray-300 rounded bg-white hover:bg-gray-100 disabled:opacity-50 transition-all" disabled>Previous</button>
+            <button className="px-3 py-1 text-xs border border-gray-300 rounded bg-white hover:bg-gray-100 transition-all">Next</button>
           </div>
-        )}
-      </main>
+        </div>
+      </div>
     </div>
-  );
-}
-
-export default function BranchesPage() {
-  return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-gray-100"><p>লোড হচ্ছে...</p></div>}>
-      <BranchesContent />
-    </Suspense>
   );
 }

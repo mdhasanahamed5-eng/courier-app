@@ -1,348 +1,151 @@
 "use client";
+import React, { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search, Plus, Filter, Edit, Trash2, Download, Printer, Upload, UserCog } from 'lucide-react';
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+const dummyBranchUsers = [
+  { id: 'U-501', name: 'Siam Ahmed', email: 'siam@example.com', phone: '01700000005', branch: 'Dhaka Main Branch', role: 'Branch Manager', status: 'Active' },
+  { id: 'U-502', name: 'Nadia Sultana', email: 'nadia@example.com', phone: '01700000006', branch: 'Dhaka Main Branch', role: 'Staff', status: 'Active' },
+  { id: 'U-503', name: 'Tanvir Hossain', email: 'tanvir@example.com', phone: '01700000007', branch: 'Chattogram Branch', role: 'Branch Manager', status: 'Active' },
+  { id: 'U-504', name: 'Mitu Akter', email: 'mitu@example.com', phone: '01700000008', branch: 'Sylhet Branch', role: 'Staff', status: 'Inactive' },
+  { id: 'U-505', name: 'Rakib Hasan', email: 'rakib@example.com', phone: '01700000009', branch: 'Rajshahi Branch', role: 'Staff', status: 'Active' },
+];
 
-function BranchUsersContent() {
+export default function BranchUserPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState([]);
-  const [branches, setBranches] = useState([]);
-  const [error, setError] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    full_name: "",
-    address: "",
-    branch_id: "",
-    phone: "",
-    email: "",
-    password: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const fileInputRef = useRef(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const handlePrint = () => window.print();
+  const handleAddUser = () => router.push('/super-admin/branch-users/new');
+  const handleBulkImport = () => fileInputRef.current.click();
 
-  async function loadData() {
-    const { data: userData, error: authError } = await supabase.auth.getUser();
+  const handleExportCSV = () => {
+    const headers = ["ID,Name,Email,Phone,Branch,Role,Status\n"];
+    const rows = dummyBranchUsers.map(u => `${u.id},${u.name},${u.email},${u.phone},${u.branch},${u.role},${u.status}`).join("\n");
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join("") + rows;
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", "branch_users_list.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-    if (authError || !userData.user) {
-      router.replace("/login");
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userData.user.id)
-      .maybeSingle();
-
-    if (!profile || profile.role !== "super_admin") {
-      setError("শুধু Super Admin এই পেজ দেখতে পারবেন।");
-      setLoading(false);
-      return;
-    }
-
-    const { data: branchData } = await supabase
-      .from("branches")
-      .select("id, name")
-      .order("name");
-
-    setBranches(branchData || []);
-
-    const { data: userList } = await supabase
-      .from("profiles")
-      .select("id, full_name, created_at")
-      .eq("role", "branch_user")
-      .order("created_at", { ascending: false });
-
-    setUsers(userList || []);
-    setLoading(false);
-  }
-
-  async function handleAddUser(e) {
-    e.preventDefault();
-    setSaving(true);
-    setMessage("");
-
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-    });
-
-    if (signUpError) {
-      setMessage("এরর: " + signUpError.message);
-      setSaving(false);
-      return;
-    }
-
-    const userId = signUpData.user?.id;
-    if (!userId) {
-      setMessage("ইউজার তৈরি হয়নি।");
-      setSaving(false);
-      return;
-    }
-
-    const { error: profileError } = await supabase.from("profiles").upsert({
-      id: userId,
-      role: "branch_user",
-      full_name: form.full_name,
-    });
-
-    if (profileError) {
-      setMessage("প্রোফাইল এরর: " + profileError.message);
-    } else {
-      setMessage("Branch User সফলভাবে যোগ হয়েছে!");
-      setForm({
-        full_name: "",
-        address: "",
-        branch_id: "",
-        phone: "",
-        email: "",
-        password: "",
-      });
-      setShowForm(false);
-      await loadData();
-    }
-
-    setSaving(false);
-  }
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-100">
-        <p className="text-gray-600">লোড হচ্ছে...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-100">
-        <div className="rounded-lg border border-red-200 bg-white p-6 text-red-600">
-          {error}
-        </div>
-      </div>
-    );
-  }
+  const filteredUsers = dummyBranchUsers.filter(user => 
+    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.phone.includes(searchTerm) ||
+    user.branch.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <aside className="w-64 flex-shrink-0 bg-gray-900 text-white">
-        <div className="border-b border-gray-700 p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-bold">SA</div>
-            <div>
-              <h1 className="font-bold">Super Admin</h1>
-              <p className="text-xs text-gray-400">Control Panel</p>
-            </div>
-          </div>
+    <div className="space-y-6">
+      <input type="file" ref={fileInputRef} onChange={(e) => alert(`Selected file: ${e.target.files[0].name}`)} className="hidden" accept=".csv, .xlsx" />
+
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Branch User Management</h1>
+          <p className="text-sm text-gray-500">Home / Super Admin / <span className="text-slate-800 font-medium">Branch Users</span></p>
         </div>
-
-        <nav className="mt-4 space-y-1 px-3 pb-6">
-          <Link href="/super-admin" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">Home</Link>
-          <div className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Parcel</div>
-          <Link href="/admin/parcels" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">All Parcels</Link>
-          <div className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Management</div>
-          <Link href="/super-admin/riders" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">Riders</Link>
-          <Link href="/super-admin/merchants" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">Merchants</Link>
-          <Link href="/super-admin/branches" className="flex items-center rounded-lg px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800">Branches</Link>
-          <Link href="/super-admin/branch-users" className="flex items-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium">Branch Users</Link>
-          <div className="mt-6 border-t border-gray-700 pt-4">
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                router.replace("/login");
-              }}
-              className="w-full rounded-lg px-4 py-2.5 text-left text-sm text-red-400 hover:bg-gray-800"
-            >
-              Logout
-            </button>
-          </div>
-        </nav>
-      </aside>
-
-      <main className="flex-1 overflow-auto p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Branch Users</h2>
-            <p className="text-sm text-gray-500">ব্রাঞ্চ ইউজারের তালিকা</p>
-          </div>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
-          >
-            {showForm ? "বাতিল" : "+ Create New Branch User"}
+        <div className="flex items-center gap-3">
+          <button onClick={handlePrint} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all shadow-sm">
+            <Printer size={16} /> Print
+          </button>
+          <button onClick={handleBulkImport} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all shadow-sm">
+            <Upload size={16} /> Bulk Import
+          </button>
+          <button onClick={handleAddUser} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-md">
+            <Plus size={18} /> Add User
           </button>
         </div>
+      </div>
 
-        {message && (
-          <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">{message}</div>
-        )}
+      {/* Action Bar */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 justify-between items-center">
+        <div className="relative w-full md:w-96">
+          <span className="absolute inset-y-0 left-3 flex items-center text-gray-400"><Search size={18} /></span>
+          <input 
+            type="text" 
+            placeholder="Search by name, email, phone or branch..." 
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-all">
+            <Filter size={16} /> Filter
+          </button>
+          <button onClick={handleExportCSV} className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-all">
+            <Download size={16} /> Export CSV
+          </button>
+        </div>
+      </div>
 
-        {showForm && (
-          <form onSubmit={handleAddUser} className="mb-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="bg-teal-600 px-5 py-3 text-white">
-              <h3 className="font-semibold">Create New Branch User</h3>
-            </div>
-            <div className="space-y-4 p-5">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Name</label>
-                <input
-                  type="text"
-                  required
-                  value={form.full_name}
-                  onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Name"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Full Address</label>
-                <input
-                  type="text"
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Address"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Branch</label>
-                <select
-                  value={form.branch_id}
-                  onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Select Branch</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Contact Number</label>
-                <div className="flex">
-                  <span className="inline-flex items-center rounded-l border border-r-0 border-gray-300 bg-gray-50 px-3 text-sm text-gray-500">+88</span>
-                  <input
-                    type="text"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full rounded-r border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="Contact Number"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Email"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Password"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Image</label>
-                <input type="file" accept="image/*" className="w-full rounded border border-gray-300 px-3 py-2 text-sm" />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  {saving ? "Submitting..." : "Submit"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm({
-                      full_name: "",
-                      address: "",
-                      branch_id: "",
-                      phone: "",
-                      email: "",
-                      password: "",
-                    })
-                  }
-                  className="rounded bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          </form>
-        )}
-
-        {!showForm && (
-          <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">Name</th>
-                    <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">Joined</th>
+      {/* Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
+              <tr className="uppercase text-[11px] tracking-wider">
+                <th className="px-6 py-4">User ID</th>
+                <th className="px-6 py-4">Full Name</th>
+                <th className="px-6 py-4">Email & Phone</th>
+                <th className="px-6 py-4">Branch</th>
+                <th className="px-6 py-4">Role</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((user, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 font-medium text-blue-600">{user.id}</td>
+                    <td className="px-6 py-4 font-medium text-slate-800">{user.name}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-slate-700">{user.email}</span>
+                        <span className="text-xs text-gray-400">{user.phone}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-600">{user.branch}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1 text-slate-600">
+                        <UserCog size={14} /> {user.role}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium 
+                        ${user.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {user.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Edit size={16} /></button>
+                        <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16} /></button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {users.length === 0 ? (
-                    <tr>
-                      <td colSpan={2} className="px-5 py-8 text-center text-gray-500">
-                        কোনো Branch User নেই
-                      </td>
-                    </tr>
-                  ) : (
-                    users.map((u) => (
-                      <tr key={u.id} className="hover:bg-gray-50">
-                        <td className="px-5 py-4 text-sm font-medium text-gray-900">{u.full_name || "—"}</td>
-                        <td className="px-5 py-4 text-sm text-gray-500">
-                          {u.created_at ? new Date(u.created_at).toLocaleDateString("bn-BD") : "—"}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                ))
+              ) : (
+                <tr><td colSpan="7" className="px-6 py-10 text-center text-gray-500">No users found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
+          <p className="text-xs text-gray-500">Showing 1 to {filteredUsers.length} of {filteredUsers.length} entries</p>
+          <div className="flex gap-2">
+            <button className="px-3 py-1 text-xs border border-gray-300 rounded bg-white hover:bg-gray-100 disabled:opacity-50 transition-all" disabled>Previous</button>
+            <button className="px-3 py-1 text-xs border border-gray-300 rounded bg-white hover:bg-gray-100 transition-all">Next</button>
           </div>
-        )}
-      </main>
+        </div>
+      </div>
     </div>
-  );
-}
-
-export default function BranchUsersPage() {
-  return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-gray-100"><p>লোড হচ্ছে...</p></div>}>
-      <BranchUsersContent />
-    </Suspense>
   );
 }
